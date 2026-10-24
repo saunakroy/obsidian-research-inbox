@@ -1,114 +1,59 @@
-import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
-	Plugin,
-} from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
-} from './settings';
+import { Plugin } from 'obsidian';
+import { CaptureModal } from './modals/CaptureModal';
+import { ReviewModal } from './modals/ReviewModal';
+import type { Resource } from './models/Resource';
+import { ArxivClient } from './services/ArxivClient';
+import { CaptureService } from './services/CaptureService';
+import { ResourceService } from './services/ResourceService';
+import { ResearchSettingsTab } from './settings/SettingsTab';
+import { DEFAULT_RESOURCE_FOLDER, validateResourceFolder } from './utils/resourceNote';
+import { ResearchNavigation } from './navigation';
+import { SidebarView, SIDEBAR_VIEW_TYPE } from './views/SidebarView';
+import { WorkspaceView, WORKSPACE_VIEW_TYPE } from './views/WorkspaceView';
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
-
-	async onload() {
-		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
+export default class ResearchInboxPlugin extends Plugin {
+	async onload(): Promise<void> {
+		let resourceFolder = DEFAULT_RESOURCE_FOLDER;
+		const saved: unknown = await this.loadData();
+		if (saved && typeof saved === 'object' && 'resourceFolder' in saved && typeof saved.resourceFolder === 'string') {
+			try { resourceFolder = validateResourceFolder(saved.resourceFolder); }
+			catch { /* Use the safe default if an old setting is invalid. */ }
+		}
+		const navigation = new ResearchNavigation(this.app);
+		const resources = this.addChild(new ResourceService(this.app, () => resourceFolder));
+		const client = new ArxivClient();
+		const capture = new CaptureService(resources, client);
+		let modal: CaptureModal | undefined;
+		let reviewModal: ReviewModal | undefined;
+		const openReview = (resource: Resource): void => {
+			if (reviewModal) return;
+			reviewModal = new ReviewModal(this.app, resources, resource, () => { reviewModal = undefined; });
+			reviewModal.open();
+		};
+		const openCapture = (): void => {
+			if (modal) return;
+			modal = new CaptureModal(this.app, capture, () => navigation.openWorkspace('inbox', true), () => { modal = undefined; });
+			modal.open();
+		};
+		this.register(() => { modal?.close(); reviewModal?.close(); client.dispose(); });
+		this.register(() => navigation.dispose());
+		this.registerView(SIDEBAR_VIEW_TYPE, (leaf) => new SidebarView(leaf, navigation, resources, openCapture));
+		this.registerView(WORKSPACE_VIEW_TYPE, (leaf) => new WorkspaceView(leaf, resources, openCapture, openReview));
+		this.addSettingTab(new ResearchSettingsTab(this.app, this, () => resourceFolder, async (folder) => {
+			await this.saveData({ resourceFolder: folder });
+			resourceFolder = folder;
+		}));
+		this.addCommand({ id: 'add-resource', name: 'Add resource', callback: openCapture });
+		this.addCommand({ id: 'open-reading-queue', name: 'Open reading queue', callback: () => navigation.openWorkspace('reading-queue') });
+		this.addRibbonIcon('inbox', 'Open research inbox', () => navigation.openSidebar());
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
+			id: 'open-sidebar', name: 'Open sidebar',
+			callback: () => navigation.openSidebar(),
 		});
-		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (
-				editor: Editor,
-				_ctx: MarkdownView | MarkdownFileInfo,
-			) => {
-				editor.replaceSelection('Sample editor command');
-			},
+			id: 'open-workspace', name: 'Open workspace',
+			callback: () => navigation.openWorkspace(),
 		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			},
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
-	}
-
-	onunload() {}
-
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
-		);
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
+		// Obsidian unregisters views on unload and preserves their layout for reload.
 	}
 }

@@ -1,14 +1,15 @@
 {
 	"name": "obsidian-research-inbox",
 	"version": "0.1.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Capture, organize, prioritize, and review academic and technical research.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
-		"lint": "eslint ."
+		"lint": "eslint .",
+		"test": "node scripts/run-tests.mjs"
 	},
 	"keywords": [],
 	"license": "0-BSD",
