@@ -24,7 +24,8 @@ jobs:
             - name: Build plugin
               run: |
                   npm ci
-                  npm run build
+                  npm run check
+                  node scripts/package-release.mjs --community
 
             - name: Check for optional styles
               id: styles

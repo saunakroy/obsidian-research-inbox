@@ -21,6 +21,10 @@ export interface Resource {
 	authors: string[];
 	captured: string;
 	status: string;
+	type?: string;
+	projects?: string[];
+	projectIds?: string[];
+	projectVersion?: string;
 	queuedAt?: string;
 	readAt?: string;
 	review?: ReviewInput;

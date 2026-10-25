@@ -7,7 +7,7 @@ export default defineConfig(
 		'node_modules',
 		'dist',
 		'esbuild.config.mjs',
-		'scripts/run-tests.mjs',
+		'scripts/*.mjs',
 		'version-bump.mjs',
 		'versions.json',
 		'main.js',
@@ -40,5 +40,10 @@ export default defineConfig(
 		// Node test tooling is not bundled into the plugin. These paths are rejection fixtures.
 		files: ['tests/**/*.ts'],
 		rules: { 'obsidianmd/no-nodejs-modules': 'off', 'obsidianmd/hardcoded-config-path': 'off' },
+	},
+	{
+		// This Node-only harness installs/restores a fake window on the Node global object.
+		files: ['tests/arxivClient.test.ts'],
+		rules: { 'obsidianmd/no-global-this': 'off' },
 	},
 );

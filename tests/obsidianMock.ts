@@ -5,14 +5,22 @@ export class Component {
 	onunload(): void {}
 	load(): void { this.onload(); }
 	unload(): void { this.onunload(); for (const off of this.cleanup) off(); }
+	register(off: () => void): void { this.cleanup.push(off); }
 	registerEvent(off: () => void): void { this.cleanup.push(off); }
 }
 
 export class TFile {
+	stat = { mtime: 1, ctime: 1, size: 0 };
 	constructor(public path: string) {}
 	get basename(): string { return this.path.split('/').pop()?.replace(/\.md$/, '') ?? ''; }
+	get extension(): string { return this.path.split('.').pop() ?? ''; }
 }
 export class TFolder { constructor(public path: string) {} }
+
+export function parseLinktext(text: string): { path: string; subpath: string } {
+	const offset = text.indexOf('#');
+	return offset < 0 ? { path: text, subpath: '' } : { path: text.slice(0, offset), subpath: text.slice(offset) };
+}
 
 // JSON is valid YAML. Obsidian's own YAML serializer is outside this test boundary.
 export function stringifyYaml(value: unknown): string { return JSON.stringify(value, null, 2); }
@@ -43,8 +51,17 @@ export function makeVault() {
 		metadataCache: {
 			on: cacheEvents.on.bind(cacheEvents),
 			getFileCache: (file: TFile) => cache.get(file.path) ?? null,
+			getFirstLinkpathDest: (path: string, source: string): TFile | null => {
+				const parent = source.slice(0, source.lastIndexOf('/') + 1);
+				for (const candidate of [path, `${path}.md`, `${parent}${path}`, `${parent}${path}.md`]) {
+					const file = files.get(candidate);
+					if (file instanceof TFile) return file;
+				}
+				return [...files.values()].find((file): file is TFile => file instanceof TFile && file.basename === path) ?? null;
+			},
 		},
 		fileManager: {
+			generateMarkdownLink: (file: TFile, _source: string): string => `[[${file.path.replace(/\.md$/, '')}]]`,
 			processFrontMatter: (file: TFile, fn: (data: Record<string, unknown>) => void): Promise<void> => {
 				try {
 					if (files.get(file.path) !== file) throw new Error('File not found');
@@ -63,6 +80,7 @@ export function makeVault() {
 		},
 		vault: {
 			on: vaultEvents.on.bind(vaultEvents),
+			cachedRead: (file: TFile): Promise<string> => contents.has(file.path) ? Promise.resolve(contents.get(file.path) ?? '') : Promise.reject(new Error('File not found')),
 			getMarkdownFiles: () => [...files.values()].filter((file): file is TFile => file instanceof TFile),
 			getAbstractFileByPath: (path: string) => files.get(path) ?? null,
 			createFolder: (path: string): Promise<TFolder> => {
@@ -83,3 +101,8 @@ export function makeVault() {
 		setFailProcess: (value: boolean) => { failProcess = value; },
 	};
 }
+
+export interface MockRequest { url: string; headers?: Record<string, string>; throw?: boolean }
+let requestHandler: (request: MockRequest) => Promise<{ status: number; text: string }> = () => Promise.reject(new Error('No mock request configured'));
+export function setRequestHandler(handler: typeof requestHandler): void { requestHandler = handler; }
+export function requestUrl(request: MockRequest): ReturnType<typeof requestHandler> { return requestHandler(request); }

@@ -2,6 +2,8 @@ import { App, Component, TFolder } from 'obsidian';
 import type { CaptureDraft, Resource, ResourceStatus, ReviewInput } from '../models/Resource';
 import { createResourceNote, resourceFromFrontmatter, validateResourceFolder } from '../utils/resourceNote';
 import { applyWorkflowChange } from '../utils/workflow';
+import type { ProjectService } from './ProjectService';
+import { applyProjectAssignments } from '../utils/projectAssignments';
 
 export class ResourceService extends Component {
 	private resources = new Map<string, Resource>();
@@ -82,6 +84,19 @@ export class ResourceService extends Component {
 		return this.enqueue(() => this.updateWorkflow(resource, 'read', snapshot));
 	}
 
+	assignProjects(resource: Resource, projectIds: string[], projects: ProjectService): Promise<Resource> {
+		const ids = [...new Set(projectIds)];
+		return this.enqueue(() => this.updateResource(resource, (data) => {
+			if (!projects.ready) throw new Error('Projects are still loading. Try again shortly.');
+			const selected = ids.map((id) => {
+				const project = projects.find(id);
+				if (!project || this.app.vault.getAbstractFileByPath(project.file.path) !== project.file) throw new Error('A selected project is unavailable or has a duplicate identifier. Reopen the assignment form.');
+				return project;
+			});
+			applyProjectAssignments(this.app, data, resource, selected, projects.list());
+		}));
+	}
+
 	create(draft: CaptureDraft, whySaved: string): Promise<{ resource: Resource; duplicate: boolean }> {
 		return this.enqueue(() => this.createOnce(draft, whySaved));
 	}
@@ -93,6 +108,10 @@ export class ResourceService extends Component {
 	}
 
 	private async updateWorkflow(resource: Resource, target: ResourceStatus, review?: ReviewInput): Promise<Resource> {
+		return this.updateResource(resource, (data) => applyWorkflowChange(data, resource, target, new Date().toISOString(), review));
+	}
+
+	private async updateResource(resource: Resource, mutate: (data: Record<string, unknown>) => void): Promise<Resource> {
 		this.assertAvailable();
 		if (this.app.vault.getAbstractFileByPath(resource.file.path) !== resource.file) {
 			throw new Error('This note was deleted or replaced. Reopen it from the workspace before trying again.');
@@ -100,7 +119,9 @@ export class ResourceService extends Component {
 		let updated: Resource | null = null;
 		await this.app.fileManager.processFrontMatter(resource.file, (data: Record<string, unknown>) => {
 			this.assertAvailable();
-			applyWorkflowChange(data, resource, target, new Date().toISOString(), review);
+			const current = resourceFromFrontmatter(resource.file, data);
+			if (!current || current.arxivId !== resource.arxivId) throw new Error('This note is no longer a recognized resource for the same paper. Nothing was changed.');
+			mutate(data);
 			updated = resourceFromFrontmatter(resource.file, data);
 		});
 		if (!updated) throw new Error('Could not read the updated resource. Reopen its note to check the properties.');
@@ -142,7 +163,7 @@ export class ResourceService extends Component {
 		const file = await this.app.vault.create(path, createResourceNote(draft, whySaved, captured));
 		const resource: Resource = {
 			file, arxivId: draft.reference.id, title: draft.paper.title,
-			authors: [...draft.paper.authors], status: 'inbox', captured,
+			authors: [...draft.paper.authors], status: 'inbox', captured, type: 'paper', projects: [], projectIds: [],
 		};
 		if (!this.disposed) {
 			this.resources.set(file.path, resource);

@@ -16,12 +16,13 @@ export class ResearchNavigation {
 	openWorkspace(section?: SectionId, resetFilter = false): void {
 		this.schedule(WORKSPACE_VIEW_TYPE, section, resetFilter);
 	}
+	openProject(id: string): void { this.schedule(WORKSPACE_VIEW_TYPE, 'projects', false, id); }
 
 	dispose(): void {
 		this.disposed = true;
 	}
 
-	private schedule(type: string, section?: SectionId, resetFilter = false): void {
+	private schedule(type: string, section?: SectionId, resetFilter = false, projectId?: string): void {
 		// Serialize opens per view type, including rapid clicks before setViewState resolves.
 		const previous = this.pending.get(type) ?? Promise.resolve();
 		const next = previous.then(async () => {
@@ -45,7 +46,8 @@ export class ResearchNavigation {
 				workspace.setActiveLeaf(leaf, { focus: true });
 			}
 			if (!this.disposed && section && leaf.view instanceof WorkspaceView) {
-				leaf.view.selectSection(section, resetFilter);
+				if (projectId) leaf.view.selectProject(projectId);
+				else leaf.view.selectSection(section, resetFilter);
 			}
 		}).catch((error: unknown) => {
 			if (this.disposed) return;

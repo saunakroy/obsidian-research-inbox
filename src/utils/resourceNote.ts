@@ -3,6 +3,7 @@ import type { CaptureDraft, Resource } from '../models/Resource';
 import type { TFile } from 'obsidian';
 import { parseArxivInput } from './arxiv';
 import { readReview, reviewVersion } from './workflow';
+import { assignmentVersion, stringList } from './projects';
 
 export const DEFAULT_RESOURCE_FOLDER = 'Research Inbox/Resources';
 
@@ -47,6 +48,8 @@ export function resourceFromFrontmatter(file: TFile, raw: unknown): Resource | n
 			authors: Array.isArray(data.authors) ? data.authors.filter((author): author is string => typeof author === 'string') : [],
 			captured: typeof data.captured === 'string' ? data.captured : '',
 			status: typeof data.status === 'string' ? data.status : 'inbox',
+			type: typeof data.type === 'string' ? data.type : 'paper',
+			projects: stringList(data.projects), projectIds: stringList(data.project_ids), projectVersion: assignmentVersion(data),
 			queuedAt: typeof data.queued_at === 'string' ? data.queued_at : undefined,
 			readAt: typeof data.read_at === 'string' ? data.read_at : undefined,
 			review: readReview(data),

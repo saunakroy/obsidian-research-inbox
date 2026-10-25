@@ -8,7 +8,7 @@ const temp = await mkdtemp(join(tmpdir(), 'research-inbox-tests-'));
 try {
 	const outfile = join(temp, 'tests.cjs');
 	await build({
-		stdin: { contents: "import './tests/capture.test.ts'; import './tests/workflow.test.ts';", resolveDir: process.cwd(), loader: 'ts' },
+		stdin: { contents: "import './tests/capture.test.ts'; import './tests/workflow.test.ts'; import './tests/projects.test.ts'; import './tests/relevance.test.ts'; import './tests/rankingService.test.ts'; import './tests/arxivClient.test.ts';", resolveDir: process.cwd(), loader: 'ts' },
 		outfile, bundle: true,
 		platform: 'node', format: 'cjs', target: 'node20',
 		alias: { obsidian: resolve('tests/obsidianMock.ts') },
